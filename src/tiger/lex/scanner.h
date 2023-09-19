@@ -63,6 +63,7 @@ private:
   void postCode(PostEnum__ type);
   void adjust();
   void adjustStr();
+  void flushBuffer();
 };
 
 inline int Scanner::lex() { return lex__(); }
@@ -83,5 +84,6 @@ inline void Scanner::adjust() {
 }
 
 inline void Scanner::adjustStr() { char_pos_ += length(); }
+inline void Scanner::flushBuffer() { string_buf_.clear(); }
 
 #endif // TIGER_LEX_SCANNER_H_
