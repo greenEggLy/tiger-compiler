@@ -19,6 +19,16 @@ public:
     switchStreams(errormsg_->infile_, out);
   }
 
+  bool CheckDot() {
+    if (last_token_ == ParserBase::Tokens__::ID)
+      return true;
+    if (last_token_ == ParserBase::Tokens__::RBRACK)
+      return true;
+    return false;
+  }
+
+  inline void UpdateToken(ParserBase::Tokens__ curr) { last_token_ = curr; }
+
   /**
    * Output an error
    * @param message error message
@@ -50,6 +60,7 @@ private:
   std::string string_buf_;
   int char_pos_;
   std::unique_ptr<err::ErrorMsg> errormsg_;
+  enum ParserBase::Tokens__ last_token_ = ParserBase::Tokens__::exp;
 
   /**
    * NOTE: do not change all the funtion signature below, which is used by

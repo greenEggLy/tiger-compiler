@@ -62,62 +62,69 @@
 
 <INITIAL>{
   /* reserved words */
-  "array" {adjust(); return Parser::ARRAY;}
-  "if" {adjust(); return Parser::IF;}
-  "then" {adjust(); return Parser::THEN;}
-  "else" {adjust(); return Parser::ELSE;}
-  "while" {adjust(); return Parser::WHILE;}
-  "for" {adjust(); return Parser::FOR;}
-  "to" {adjust(); return Parser::TO;}
-  "do" {adjust(); return Parser::DO;}
-  "let" {adjust(); return Parser::LET;}
-  "in" {adjust(); return Parser::IN;}
-  "end" {adjust(); return Parser::END;}
-  "of" {adjust(); return Parser::OF;}
-  "break" {adjust(); return Parser::BREAK;}
-  "nil" {adjust(); return Parser::NIL;}
-  "function" {adjust(); return Parser::FUNCTION;}
-  "var" {adjust(); return Parser::VAR;}
-  "type" {adjust(); return Parser::TYPE;}
-
+  "array" {adjust();UpdateToken(Parser::ARRAY); return Parser::ARRAY;}
+  "if" {adjust(); UpdateToken(Parser::IF);return Parser::IF;}
+  "then" {adjust();UpdateToken(Parser::THEN); return Parser::THEN;}
+  "else" {adjust(); UpdateToken(Parser::ELSE);return Parser::ELSE;}
+  "while" {adjust();UpdateToken(Parser::WHILE); return Parser::WHILE;}
+  "for" {adjust();UpdateToken(Parser::FOR); return Parser::FOR;}
+  "to" {adjust();UpdateToken(Parser::TO); return Parser::TO;}
+  "do" {adjust();UpdateToken(Parser::DO); return Parser::DO;}
+  "let" {adjust();UpdateToken(Parser::LET); return Parser::LET;}
+  "in" {adjust();UpdateToken(Parser::IN); return Parser::IN;}
+  "end" {adjust();UpdateToken(Parser::END); return Parser::END;}
+  "of" {adjust();UpdateToken(Parser::OF); return Parser::OF;}
+  "break" {adjust();UpdateToken(Parser::BREAK) ;return Parser::BREAK;}
+  "nil" {adjust();UpdateToken(Parser::NIL); return Parser::NIL;}
+  "function" {adjust();UpdateToken(Parser::FUNCTION); return Parser::FUNCTION;}
+  "var" {adjust();UpdateToken(Parser::VAR); return Parser::VAR;}
+  "type" {adjust();UpdateToken(Parser::TYPE); return Parser::TYPE;}
 
   /* operators */
-  "+" {adjust(); return Parser::PLUS;}
-  "-" {adjust(); return Parser::MINUS;}
-  "*" {adjust(); return Parser::TIMES;}
-  "/" {adjust(); return Parser::DIVIDE;}
-  "=" {adjust(); return Parser::EQ;}
-  "<>" {adjust(); return Parser::NEQ;}
-  "<" {adjust(); return Parser::LT;}
-  "<=" {adjust(); return Parser::LE;}
-  ">" {adjust(); return Parser::GT;}
-  ">=" {adjust(); return Parser::GE;}
-  "&" {adjust(); return Parser::AND;}
-  "|" {adjust(); return Parser::OR;}
-  ":=" {adjust(); return Parser::ASSIGN;}
+  "+" {adjust();UpdateToken(Parser::PLUS); return Parser::PLUS;}
+  "-" {adjust();UpdateToken(Parser::MINUS); return Parser::MINUS;}
+  "*" {adjust();UpdateToken(Parser::TIMES); return Parser::TIMES;}
+  "/" {adjust();UpdateToken(Parser::DIVIDE); return Parser::DIVIDE;}
+  "=" {adjust();UpdateToken(Parser::EQ); return Parser::EQ;}
+  "<>" {adjust();UpdateToken(Parser::NEQ); return Parser::NEQ;}
+  "<" {adjust();UpdateToken(Parser::LT) ;return Parser::LT;}
+  "<=" {adjust();UpdateToken(Parser::LE); return Parser::LE;}
+  ">" {adjust();UpdateToken(Parser::GT); return Parser::GT;}
+  ">=" {adjust();UpdateToken(Parser::GE); return Parser::GE;}
+  "&" {adjust();UpdateToken(Parser::AND); return Parser::AND;}
+  "|" {adjust();UpdateToken(Parser::OR); return Parser::OR;}
+  ":=" {adjust();UpdateToken(Parser::ASSIGN); return Parser::ASSIGN;}
 
   /* delimiters */
-  "." {adjust(); return Parser::DOT;}
-  "," {adjust(); return Parser::COMMA;}
-  ":" {adjust(); return Parser::COLON;}
-  ";" {adjust(); return Parser::SEMICOLON;}
-  "(" {adjust(); return Parser::LPAREN;}
-  ")" {adjust(); return Parser::RPAREN;}
-  "[" {adjust(); return Parser::LBRACK;}
-  "]" {adjust(); return Parser::RBRACK;}
-  "{" {adjust(); return Parser::LBRACE;}
-  "}" {adjust(); return Parser::RBRACE;}
-}
+  "." {
+        adjust(); 
+        if(!CheckDot())
+          errormsg_->Error(errormsg_->tok_pos_, "illegal token");
+        else{
+          UpdateToken(Parser::DOT);
+          return Parser::DOT;
+        }
+      }
+  "," {adjust(); UpdateToken(Parser::COMMA);return Parser::COMMA;}
+  ":" {adjust();UpdateToken(Parser::COLON); return Parser::COLON;}
+  ";" {adjust();UpdateToken(Parser::SEMICOLON); return Parser::SEMICOLON;}
+  "(" {adjust();UpdateToken(Parser::LPAREN); return Parser::LPAREN;}
+  ")" {adjust();UpdateToken(Parser::RPAREN); return Parser::RPAREN;}
+  "[" {adjust();UpdateToken(Parser::LBRACK); return Parser::LBRACK;}
+  "]" {adjust();UpdateToken(Parser::RBRACK); return Parser::RBRACK;}
+  "{" {adjust();UpdateToken(Parser::LBRACE); return Parser::LBRACE;}
+  "}" {adjust();UpdateToken(Parser::RBRACE); return Parser::RBRACE;}
+
 /* identifier */
-[a-zA-Z][a-zA-Z0-9_]* {adjust(); string_buf_ = matched(); return Parser::ID;}
+  [a-zA-Z][a-zA-Z0-9_]* {adjust(); string_buf_ = matched();UpdateToken(Parser::ID); return Parser::ID;}
 
 /* integer */
-[0-9]+ {adjust(); string_buf_ = matched(); return Parser::INT;}
-
+  [0-9]+ {adjust(); string_buf_ = matched();UpdateToken(Parser::INT); return Parser::INT;}
+}
 /* string */
 <INITIAL> \" {adjust(); begin(StartCondition__::STR); flushBuffer();}
 <STR> {
-      \" {adjustStr(); setMatched(string_buf_);  begin(StartCondition__::INITIAL); return Parser::STRING;}
+      \" {adjustStr(); setMatched(string_buf_);  begin(StartCondition__::INITIAL);UpdateToken(Parser::STRING); return Parser::STRING;}
       /* ‘\a’, ‘\b’, ‘\f’, ‘\n’, ‘\r’, ‘\t’, ‘\v’ */
       \\a {adjustStr(); string_buf_ += '\a';}
       \\b {adjustStr(); string_buf_ += '\b';}
@@ -156,5 +163,7 @@
 [ \t]+ {adjust();}
 \n {adjust(); errormsg_->Newline();}
 
+<<EOF>> {return 0;}
+
  /* illegal input */
-<INITIAL>. {adjust(); errormsg_->Error(errormsg_->tok_pos_, "illegal token");}
+. {adjust(); errormsg_->Error(errormsg_->tok_pos_, "illegal token");}
