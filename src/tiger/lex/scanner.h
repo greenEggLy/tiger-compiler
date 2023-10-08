@@ -19,6 +19,16 @@ public:
     switchStreams(errormsg_->infile_, out);
   }
 
+  bool CheckDot() {
+    if (last_token_ == ParserBase::Tokens__::ID)
+      return true;
+    if (last_token_ == ParserBase::Tokens__::RBRACK)
+      return true;
+    return false;
+  }
+
+  inline void UpdateToken(ParserBase::Tokens__ curr) { last_token_ = curr; }
+
   /**
    * Output an error
    * @param message error message
@@ -50,6 +60,7 @@ private:
   std::string string_buf_;
   int char_pos_;
   std::unique_ptr<err::ErrorMsg> errormsg_;
+  enum ParserBase::Tokens__ last_token_ = ParserBase::Tokens__::exp;
 
   /**
    * NOTE: do not change all the funtion signature below, which is used by
@@ -63,6 +74,7 @@ private:
   void postCode(PostEnum__ type);
   void adjust();
   void adjustStr();
+  void flushBuffer();
 };
 
 inline int Scanner::lex() { return lex__(); }
@@ -83,5 +95,6 @@ inline void Scanner::adjust() {
 }
 
 inline void Scanner::adjustStr() { char_pos_ += length(); }
+inline void Scanner::flushBuffer() { string_buf_.clear(); }
 
 #endif // TIGER_LEX_SCANNER_H_
