@@ -1,10 +1,10 @@
 WORKDIR=$(dirname "$(dirname "$(readlink -f "$0")")")
 
-ref_dir=${WORKDIR}/testdata/lab2/refs
-testcase_dir=${WORKDIR}/testdata/lab2/testcases
-ref=${ref_dir}/$1".out"
-testcase=${testcase_dir}/$1".tig"
-#${WORKDIR}/build/test_lex ${testcase} >/tmp/output.txt
+ref_dir=${WORKDIR}/testdata/lab3/refs
+testcase_dir=${WORKDIR}/testdata/lab3/testcases
+# ref=${ref_dir}/$1".out"
+# testcase=${testcase_dir}/$1".tig"
+#${WORKDIR}/build/test_parse ${testcase} >/tmp/output.txt
 #diff -c /tmp/output.txt "${ref}"
 #if [[ $? != 0 ]]; then
 #    echo "Error: Output mismatch"
@@ -18,7 +18,7 @@ for testcase in "$testcase_dir"/*.tig; do
     testcase_name=$(basename "$testcase" | cut -f1 -d".")
     ref=${ref_dir}/${testcase_name}.out
 
-    ${WORKDIR}/build/test_lex "$testcase" >&/tmp/output.txt
+    ${WORKDIR}/build/test_parse "$testcase" >&/tmp/output.txt
     diff -c /tmp/output.txt "${ref}"
     if [[ $? != 0 ]]; then
             echo "Error: Output mismatch"
