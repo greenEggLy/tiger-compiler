@@ -37,19 +37,11 @@ public:
   Table() : tab::Table<Symbol, ValueType>() {}
   void BeginScope();
   void EndScope();
-  void BeginLoop();
-  void EndLoop();
-  bool IsInLoop();
 
 private:
   Symbol marksym_ = {"<mark>", nullptr};
   int32_t loop_ = 0;
 };
-template <typename ValueType> bool Table<ValueType>::IsInLoop() {
-  return loop_ > 0;
-}
-template <typename ValueType> void Table<ValueType>::EndLoop() { loop_ -= 1; }
-template <typename ValueType> void Table<ValueType>::BeginLoop() { loop_ += 1; }
 
 template <typename ValueType> void Table<ValueType>::BeginScope() {
   this->Enter(&marksym_, nullptr);

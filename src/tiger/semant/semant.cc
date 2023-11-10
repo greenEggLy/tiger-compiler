@@ -209,13 +209,13 @@ type::Ty *WhileExp::SemAnalyze(env::VEnvPtr venv, env::TEnvPtr tenv,
     errormsg->Error(test_->pos_, "integer required");
     return type::VoidTy::Instance();
   }
-  venv->BeginLoop();
+  labelcount++;
   venv->BeginScope();
   tenv->BeginScope();
   auto while_type = this->body_->SemAnalyze(venv, tenv, labelcount, errormsg);
   tenv->EndScope();
   venv->EndScope();
-  venv->EndLoop();
+  labelcount--;
   if (typeid(*while_type) != typeid(type::VoidTy)) {
     errormsg->Error(body_->pos_, "while body must produce no value");
   }
@@ -232,20 +232,20 @@ type::Ty *ForExp::SemAnalyze(env::VEnvPtr venv, env::TEnvPtr tenv,
   if (typeid(*low_) != typeid(type::IntTy)) {
     errormsg->Error(this->lo_->pos_, "for exp's range type is not integer");
   }
-  venv->BeginLoop();
+  labelcount++;
   venv->BeginScope();
   tenv->BeginScope();
   venv->Enter(this->var_, new env::VarEntry(type::IntTy::Instance(), true));
   body_->SemAnalyze(venv, tenv, labelcount, errormsg);
   tenv->EndScope();
   venv->EndScope();
-  venv->EndLoop();
+  labelcount--;
   return type::VoidTy::Instance();
 }
 
 type::Ty *BreakExp::SemAnalyze(env::VEnvPtr venv, env::TEnvPtr tenv,
                                int labelcount, err::ErrorMsg *errormsg) const {
-  if (!venv->IsInLoop()) {
+  if (labelcount == 0) {
     errormsg->Error(pos_, "break is not inside any loop");
   }
   return type::VoidTy::Instance();
