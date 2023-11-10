@@ -40,6 +40,7 @@ public:
 
 private:
   Symbol marksym_ = {"<mark>", nullptr};
+  int32_t loop_ = 0;
 };
 
 template <typename ValueType> void Table<ValueType>::BeginScope() {

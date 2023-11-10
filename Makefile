@@ -8,7 +8,7 @@ docker-pull:
 
 docker-run:
 	docker run -it --privileged -p 2222:22 \
-		-v $(shell pwd):/home/stu/tiger-compiler ipadsse302/tigerlabs_env:latest
+		-v $(shell pwd):/home/stu/tiger-compiler tiger_compiler:latest
 
 docker-run-backend:
 	docker run -dt --privileged -p 2222:22 \
