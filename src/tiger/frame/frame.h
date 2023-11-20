@@ -64,6 +64,7 @@ public:
   [[nodiscard]] virtual temp::Temp *ReturnValue() = 0;
 
   temp::Map *temp_map_;
+
 protected:
   std::vector<temp::Temp *> regs_;
 };
@@ -71,13 +72,23 @@ protected:
 class Access {
 public:
   /* TODO: Put your lab5 code here */
-  
+  virtual tree::Exp *ToExp(tree::Exp *framePtr) const = 0;
   virtual ~Access() = default;
-  
 };
 
 class Frame {
+public:
   /* TODO: Put your lab5 code here */
+  temp::Label *label_;
+  //  denoting the locations where the formal parameters will be kept at run
+  //  time as seen from inside the callee
+  std::list<Access *> *formals_ = nullptr;
+  int offset_ = 0;
+
+public:
+  Frame(temp::Label *name, const std::list<bool> &formals) : label_(name){};
+  virtual frame::Access *AllocLocal(bool escape) = 0;
+  [[nodiscard]] std::list<Access *> *Formals() const { return formals_; }
 };
 
 /**
@@ -128,7 +139,7 @@ public:
   const std::list<Frag*> &GetList() { return frags_; }
 
 private:
-  std::list<Frag*> frags_;
+  std::list<Frag *> frags_;
 };
 
 /* TODO: Put your lab5 code here */
