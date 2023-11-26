@@ -50,7 +50,7 @@ public:
   explicit ExExp(tree::Exp *exp) : exp_(exp) {}
 
   [[nodiscard]] tree::Exp *UnEx() override { return exp_; }
-  [[nodiscard]] tree::Stm *UnNx() override { new tree::ExpStm(exp_); }
+  [[nodiscard]] tree::Stm *UnNx() override { return new tree::ExpStm(exp_); }
   [[nodiscard]] Cx UnCx(err::ErrorMsg *errormsg) override {
     auto stm = new tree::CjumpStm(tree::NE_OP, exp_, new tree::ConstExp(0),
                                   nullptr, nullptr);
@@ -85,46 +85,23 @@ public:
       : cx_(trues, falses, stm) {}
 
   [[nodiscard]] tree::Exp *UnEx() override {
-    //    auto reg = temp::TempFactory::NewTemp();
-    //    auto true_label = temp::LabelFactory::NewLabel(),
-    //         false_label = temp::LabelFactory::NewLabel();
-    //    cx_.trues_.DoPatch(true_label);
-    //    cx_.falses_.DoPatch(false_label);
-    //    return new tree::EseqExp(
-    //        new tree::MoveStm(new tree::TempExp(reg), new tree::ConstExp(1)),
-    //        new tree::EseqExp(
-    //            cx_.stm_, new tree::EseqExp(
-    //                          new tree::LabelStm(false_label),
-    //                          new tree::EseqExp(
-    //                              new tree::MoveStm(new tree::TempExp(reg),
-    //                                                new tree::ConstExp(0)),
-    //                              new tree::EseqExp(new
-    //                              tree::LabelStm(true_label),
-    //                                                new
-    //                                                tree::TempExp(reg))))));
-    auto r = temp::TempFactory::NewTemp();
-    auto t = temp::LabelFactory::NewLabel();
-    auto f = temp::LabelFactory::NewLabel();
-    cx_.trues_.DoPatch(t);
-    cx_.falses_.DoPatch(f);
+    auto reg = temp::TempFactory::NewTemp();
+    auto true_label = temp::LabelFactory::NewLabel(),
+         false_label = temp::LabelFactory::NewLabel();
+    cx_.trues_.DoPatch(true_label);
+    cx_.falses_.DoPatch(false_label);
     return new tree::EseqExp(
-        new tree::MoveStm(new tree::TempExp(r), new tree::ConstExp(1)),
+        new tree::MoveStm(new tree::TempExp(reg), new tree::ConstExp(1)),
         new tree::EseqExp(
-            cx_.stm_,
-            new tree::EseqExp(
-                new tree::LabelStm(f),
-                new tree::EseqExp(new tree::MoveStm(new tree::TempExp(r),
-                                                    new tree::ConstExp(0)),
-                                  new tree::EseqExp(new tree::LabelStm(t),
-                                                    new tree::TempExp(r))))));
+            cx_.stm_, new tree::EseqExp(
+                          new tree::LabelStm(false_label),
+                          new tree::EseqExp(
+                              new tree::MoveStm(new tree::TempExp(reg),
+                                                new tree::ConstExp(0)),
+                              new tree::EseqExp(new tree::LabelStm(true_label),
+                                                new tree::TempExp(reg))))));
   }
-  [[nodiscard]] tree::Stm *UnNx() override {
-    return cx_.stm_;
-    //    auto label = temp::LabelFactory::NewLabel();
-    //    cx_.trues_.DoPatch(label);
-    //    cx_.falses_.DoPatch(label);
-    //    return new tree::SeqStm(cx_.stm_, new tree::LabelStm(label));
-  }
+  [[nodiscard]] tree::Stm *UnNx() override { return cx_.stm_; }
   [[nodiscard]] Cx UnCx(err::ErrorMsg *errormsg) override { return cx_; }
 };
 
@@ -294,8 +271,8 @@ tr::ExpAndTy *CallExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
 tr::ExpAndTy *OpExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
                                tr::Level *level, temp::Label *label,
                                err::ErrorMsg *errormsg) const {
-  auto left_exp_ty = left_->Translate(venv, tenv, level, label, errormsg);
-  auto right_exp_ty = right_->Translate(venv, tenv, level, label, errormsg);
+  auto left_exp = left_->Translate(venv, tenv, level, label, errormsg);
+  auto right_exp = right_->Translate(venv, tenv, level, label, errormsg);
   if (oper_ == Oper::PLUS_OP || oper_ == Oper::MINUS_OP ||
       oper_ == Oper::TIMES_OP || oper_ == Oper::DIVIDE_OP) {
     tree::BinOp binop;
@@ -316,8 +293,8 @@ tr::ExpAndTy *OpExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
       assert(0);
     }
     return new tr::ExpAndTy{
-        new tr::ExExp{new tree::BinopExp{binop, left_exp_ty->exp_->UnEx(),
-                                         right_exp_ty->exp_->UnEx()}},
+        new tr::ExExp{new tree::BinopExp{binop, left_exp->exp_->UnEx(),
+                                         right_exp->exp_->UnEx()}},
         type::IntTy::Instance()};
   }
   if (oper_ == Oper::GE_OP || oper_ == Oper::GT_OP || oper_ == Oper::LE_OP ||
@@ -345,16 +322,15 @@ tr::ExpAndTy *OpExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
     case ABSYN_OPER_COUNT:
       op = tree::REL_OPER_COUNT;
     default:
-      assert(0);
+      break;
     }
     if ((oper_ == EQ_OP || oper_ == NEQ_OP) &&
-        left_exp_ty->ty_->IsSameType(type::StringTy::Instance())) {
-      auto arg_list = new tree::ExpList{left_exp_ty->exp_->UnEx(),
-                                        right_exp_ty->exp_->UnEx()};
+        left_exp->ty_->IsSameType(type::StringTy::Instance())) {
+      auto arg_list =
+          new tree::ExpList{left_exp->exp_->UnEx(), right_exp->exp_->UnEx()};
       auto call_exp = new tree::CallExp(
           new tree::NameExp(temp::LabelFactory::NamedLabel("string_equal")),
           arg_list);
-      //      auto call_exp = frame::ExternalCall("string_equal", arg_list);
       auto stm = new tree::CjumpStm{tree::EQ_OP, tr::ExExp(call_exp).UnEx(),
                                     new tree::ConstExp(1), nullptr, nullptr};
       return new tr::ExpAndTy{new tr::CxExp{tr::PatchList{{&stm->true_label_}},
@@ -362,16 +338,16 @@ tr::ExpAndTy *OpExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
                                             stm},
                               type::IntTy::Instance()};
     }
-    auto stm = new tree::CjumpStm{op, left_exp_ty->exp_->UnEx(),
-                                  right_exp_ty->exp_->UnEx(), nullptr, nullptr};
+    auto stm = new tree::CjumpStm{op, left_exp->exp_->UnEx(),
+                                  right_exp->exp_->UnEx(), nullptr, nullptr};
     return new tr::ExpAndTy{new tr::CxExp{tr::PatchList{{&stm->true_label_}},
                                           tr::PatchList{{&stm->false_label_}},
                                           stm},
                             type::IntTy::Instance()};
   }
   auto new_label = temp::LabelFactory::NewLabel();
-  auto left_cx = left_exp_ty->exp_->UnCx(errormsg);
-  auto right_cx = right_exp_ty->exp_->UnCx(errormsg);
+  auto left_cx = left_exp->exp_->UnCx(errormsg);
+  auto right_cx = right_exp->exp_->UnCx(errormsg);
   if (oper_ == Oper::AND_OP) {
     auto trues = tr::PatchList{right_cx.trues_};
     auto falses = tr::PatchList::JoinPatch(left_cx.falses_, right_cx.falses_);
@@ -392,130 +368,6 @@ tr::ExpAndTy *OpExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
     return new tr::ExpAndTy(new tr::CxExp(trues, falses, stm),
                             type::IntTy::Instance());
   }
-  assert(0);
-  //  tr::Exp *exp = nullptr;
-  //
-  //  auto left_exp = this->left_->Translate(venv, tenv, level, label,
-  //  errormsg); auto right_exp = this->right_->Translate(venv, tenv, level,
-  //  label, errormsg); switch (this->oper_) { case Oper::PLUS_OP: case
-  //  Oper::MINUS_OP: case Oper::TIMES_OP: case Oper::DIVIDE_OP:
-  //    if (!left_exp->ty_->IsSameType(type::IntTy::Instance()) ||
-  //        !right_exp->ty_->IsSameType(type::IntTy::Instance())) {
-  //      errormsg->Error(pos_, "integer required");
-  //      exp = new tr::ExExp(new tree::BinopExp(
-  //          tree::PLUS_OP, left_exp->exp_->UnEx(), right_exp->exp_->UnEx()));
-  //      return new tr::ExpAndTy(exp, type::IntTy::Instance());
-  //    } else {
-  //      if (oper_ == Oper::PLUS_OP)
-  //        exp = new tr::ExExp(new tree::BinopExp(
-  //            tree::PLUS_OP, left_exp->exp_->UnEx(),
-  //            right_exp->exp_->UnEx()));
-  //      if (oper_ == Oper::MINUS_OP)
-  //        exp = new tr::ExExp(new tree::BinopExp(
-  //            tree::MINUS_OP, left_exp->exp_->UnEx(),
-  //            right_exp->exp_->UnEx()));
-  //      if (oper_ == Oper::TIMES_OP)
-  //        exp = new tr::ExExp(new tree::BinopExp(
-  //            tree::MUL_OP, left_exp->exp_->UnEx(), right_exp->exp_->UnEx()));
-  //      if (oper_ == Oper::DIVIDE_OP)
-  //        exp = new tr::ExExp(new tree::BinopExp(
-  //            tree::DIV_OP, left_exp->exp_->UnEx(), right_exp->exp_->UnEx()));
-  //      return new tr::ExpAndTy(exp, type::IntTy::Instance());
-  //    }
-  //  case AND_OP: {
-  //    auto left_cx = left_exp->exp_->UnCx(errormsg);
-  //    auto right_cx = right_exp->exp_->UnCx(errormsg);
-  //    auto true_label = temp::LabelFactory::NewLabel();
-  //    auto falses = tr::PatchList::JoinPatch(left_cx.falses_,
-  //    right_cx.falses_); auto trues = tr::PatchList(right_cx.trues_); auto seq
-  //    = new tree::SeqStm(
-  //        left_cx.stm_,
-  //        new tree::SeqStm(new tree::LabelStm(true_label), right_cx.stm_));
-  //    exp = new tr::CxExp(trues, falses, seq);
-  //    return new tr::ExpAndTy(exp, type::IntTy::Instance());
-  //  }
-  //  case OR_OP: {
-  //    auto left_cx = left_exp->exp_->UnCx(errormsg);
-  //    auto right_cx = right_exp->exp_->UnCx(errormsg);
-  //    auto false_label = temp::LabelFactory::NewLabel();
-  //    auto trues = tr::PatchList::JoinPatch(left_cx.trues_, right_cx.trues_);
-  //    auto falses = tr::PatchList(right_cx.falses_);
-  //    left_cx.falses_.DoPatch(false_label);
-  //    auto seq = new tree::SeqStm(
-  //        left_cx.stm_,
-  //        new tree::SeqStm(new tree::LabelStm(false_label), right_cx.stm_));
-  //    exp = new tr::CxExp(trues, falses, seq);
-  //    return new tr::ExpAndTy(exp, type::IntTy::Instance());
-  //  }
-  //  case EQ_OP:
-  //  case NEQ_OP:
-  //  case LT_OP:
-  //  case LE_OP:
-  //  case GT_OP:
-  //  case GE_OP: {
-  //    auto trues = tr::PatchList();
-  //    auto falses = tr::PatchList();
-  //    tree::CjumpStm *stm = nullptr;
-  //    //    if (!left_exp->ty_->IsSameType(right_exp->ty_)) {
-  //    //      errormsg->Error(pos_, "same type required");
-  //    //      exp = new tr::CxExp(
-  //    //          trues, falses,
-  //    //          new tree::CjumpStm(tree::EQ_OP, left_exp->exp_->UnEx(),
-  //    //                             right_exp->exp_->UnEx(), nullptr,
-  //    nullptr));
-  //    //      return new tr::ExpAndTy(exp, type::IntTy::Instance());
-  //    //    } else {
-  //    if (oper_ == EQ_OP) {
-  //      if (typeid(*left_exp->ty_) == typeid(type::StringTy)) {
-  //        auto expList = new tree::ExpList();
-  //        //        expList->Append(new
-  //        //        tree::TempExp(reg_manager->FramePointer()));
-  //        expList->Append(left_exp->exp_->UnEx());
-  //        expList->Append(right_exp->exp_->UnEx());
-  //        stm = new tree::CjumpStm(
-  //            tree::EQ_OP,
-  //            new tree::CallExp(new
-  //            tree::NameExp(temp::LabelFactory::NamedLabel(
-  //                                  "string_equal")),
-  //                              expList),
-  //            new tree::ConstExp(1), nullptr, nullptr);
-  //      } else {
-  //        stm = new tree::CjumpStm(tree::EQ_OP, left_exp->exp_->UnEx(),
-  //                                 right_exp->exp_->UnEx(), nullptr, nullptr);
-  //      }
-  //    }
-  //    if (oper_ == NEQ_OP) {
-  //      stm = new tree::CjumpStm(tree::NE_OP, left_exp->exp_->UnEx(),
-  //                               right_exp->exp_->UnEx(), nullptr, nullptr);
-  //    }
-  //    if (oper_ == LT_OP) {
-  //      stm = new tree::CjumpStm(tree::LT_OP, left_exp->exp_->UnEx(),
-  //                               right_exp->exp_->UnEx(), nullptr, nullptr);
-  //    }
-  //    if (oper_ == LE_OP) {
-  //      stm = new tree::CjumpStm(tree::LE_OP, left_exp->exp_->UnEx(),
-  //                               right_exp->exp_->UnEx(), nullptr, nullptr);
-  //    }
-  //    if (oper_ == GT_OP) {
-  //      stm = new tree::CjumpStm(tree::GT_OP, left_exp->exp_->UnEx(),
-  //                               right_exp->exp_->UnEx(), nullptr, nullptr);
-  //    }
-  //    if (oper_ == GE_OP) {
-  //      stm = new tree::CjumpStm(tree::GE_OP, left_exp->exp_->UnEx(),
-  //                               right_exp->exp_->UnEx(), nullptr, nullptr);
-  //    }
-  //    trues.DoPatch(stm->true_label_);
-  //    falses.DoPatch(stm->false_label_);
-  //    exp = new tr::CxExp(trues, falses, stm);
-  //    //    auto new_exp = exp->UnEx();
-  //    //    return new tr::ExpAndTy(new tr::ExExp(new_exp),
-  //    //    type::IntTy::Instance());
-  //    return new tr::ExpAndTy(exp, type::IntTy::Instance());
-  //  }
-  //    //  }
-  //  case ABSYN_OPER_COUNT:
-  //    return nullptr;
-  //  }
 }
 
 tr::ExpAndTy *RecordExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
