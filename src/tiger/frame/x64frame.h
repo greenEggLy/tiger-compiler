@@ -34,18 +34,21 @@ public:
 class X64Frame : public Frame {
 public:
   const int word_size_ = 8;
-  /* TODO: Put your lab5 code here */
+
 public:
   X64Frame(temp::Label *name, const std::list<bool> &formals)
       : Frame(name, formals) {
     formals_ = new std::list<Access *>();
     for (const auto &formal : formals) {
-      formals_->emplace_back(AllocLocal(formal));
+      formals_->emplace_back(this->AllocLocal(formal));
     }
-    // todo
   }
   frame::Access *AllocLocal(bool escape) override;
 };
+
+tree::Stm *ProcEntryExit1(frame::Frame *frame, tree::Stm *stm);
+assem::InstrList *ProcEntryExit2(assem::InstrList *body);
+assem::Proc *ProcEntryExit3(frame::Frame *frame, assem::InstrList *body);
 
 } // namespace frame
 #endif // TIGER_COMPILER_X64FRAME_H

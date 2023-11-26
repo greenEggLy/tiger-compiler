@@ -26,9 +26,12 @@ type::Ty *SimpleVar::SemAnalyze(env::VEnvPtr venv, env::TEnvPtr tenv,
 
 type::Ty *FieldVar::SemAnalyze(env::VEnvPtr venv, env::TEnvPtr tenv,
                                int labelcount, err::ErrorMsg *errormsg) const {
-  auto var_type_ = this->var_->SemAnalyze(venv, tenv, labelcount, errormsg);
+  auto var_type_ =
+      this->var_->SemAnalyze(venv, tenv, labelcount, errormsg)->ActualTy();
   if (typeid(*var_type_) != typeid(type::RecordTy)) {
-    errormsg->Error(this->var_->pos_, "not a record type");
+
+    errormsg->Error(this->var_->pos_, "not a record type, typeid is %s",
+                    typeid(*var_type_->ActualTy()).name());
     return type::VoidTy::Instance();
   }
   auto fields = dynamic_cast<type::RecordTy *>(var_type_)->fields_->GetList();
@@ -455,4 +458,4 @@ void ProgSem::SemAnalyze() {
   absyn_tree_->SemAnalyze(venv_.get(), tenv_.get(), errormsg_.get());
 }
 
-} // namespace tr
+} // namespace sem

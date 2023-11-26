@@ -5,10 +5,9 @@
 #include <memory>
 #include <string>
 
+#include "tiger/codegen/assem.h"
 #include "tiger/frame/temp.h"
 #include "tiger/translate/tree.h"
-#include "tiger/codegen/assem.h"
-
 
 namespace frame {
 
@@ -76,19 +75,42 @@ public:
   virtual ~Access() = default;
 };
 
+class InRegAccess : public Access {
+public:
+  temp::Temp *reg;
+
+  explicit InRegAccess(temp::Temp *reg) : reg(reg) {}
+  /* TODO: Put your lab5 code here */
+  tree::Exp *ToExp(tree::Exp *framePtr) const override {
+    return new tree::TempExp(reg);
+  }
+};
+
+class InFrameAccess : public Access {
+public:
+  int offset;
+
+  explicit InFrameAccess(int offset) : offset(offset) {}
+  tree::Exp *ToExp(tree::Exp *frame_ptr) const override {
+    return new tree::MemExp(new tree::BinopExp(tree::PLUS_OP, frame_ptr,
+                                               new tree::ConstExp(offset)));
+  }
+};
+
 class Frame {
 public:
   /* TODO: Put your lab5 code here */
-  temp::Label *label_;
+  temp::Label *name_;
   //  denoting the locations where the formal parameters will be kept at run
   //  time as seen from inside the callee
   std::list<Access *> *formals_ = nullptr;
   int offset_ = 0;
 
 public:
-  Frame(temp::Label *name, const std::list<bool> &formals) : label_(name){};
+  Frame(temp::Label *name, const std::list<bool> &formals) : name_(name){};
   virtual frame::Access *AllocLocal(bool escape) = 0;
   [[nodiscard]] std::list<Access *> *Formals() const { return formals_; }
+  [[nodiscard]] std::string GetLabel() const { return name_->Name(); }
 };
 
 /**
@@ -108,7 +130,8 @@ public:
    *Generate assembly for main program
    * @param out FILE object for output assembly file
    */
-  virtual void OutputAssem(FILE *out, OutputPhase phase, bool need_ra) const = 0;
+  virtual void OutputAssem(FILE *out, OutputPhase phase,
+                           bool need_ra) const = 0;
 };
 
 class StringFrag : public Frag {
@@ -136,7 +159,7 @@ class Frags {
 public:
   Frags() = default;
   void PushBack(Frag *frag) { frags_.emplace_back(frag); }
-  const std::list<Frag*> &GetList() { return frags_; }
+  const std::list<Frag *> &GetList() { return frags_; }
 
 private:
   std::list<Frag *> frags_;
