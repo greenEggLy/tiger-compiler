@@ -521,7 +521,6 @@ tr::ExpAndTy *OpExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
 tr::ExpAndTy *RecordExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
                                    tr::Level *level, temp::Label *label,
                                    err::ErrorMsg *errormsg) const {
-  printf("[LOG]begin Record %s\n", this->typ_->Name().c_str());
   auto fields = this->fields_->GetList();
   auto type = tenv->Look(this->typ_)->ActualTy();
   // alloc
@@ -549,9 +548,7 @@ tr::ExpAndTy *RecordExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
     field_iter++;
     i++;
   }
-  auto exp = new tr::ExExp(
-      new tree::EseqExp(new tree::SeqStm(stm, stm), new tree::TempExp(reg)));
-  printf("[LOG]end Record %s\n", this->typ_->Name().c_str());
+  auto exp = new tr::ExExp(new tree::EseqExp(stm, new tree::TempExp(reg)));
   return new tr::ExpAndTy(exp, type);
 }
 
@@ -860,8 +857,9 @@ tr::Exp *FunctionDec::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
                                                func_entry->label_, errormsg);
     auto ret_stm = new tree::MoveStm(
         new tree::TempExp(reg_manager->ReturnValue()), body_exp->exp_->UnEx());
-    auto body = frame::ProcEntryExit1(func_level->frame_, ret_stm);
     venv->EndScope();
+    //    auto body = ret_stm;
+    auto body = frame::ProcEntryExit1(func_level->frame_, ret_stm);
     frags->PushBack(new frame::ProcFrag(body, func_level->frame_));
   }
   return new tr::ExExp(new tree::ConstExp(0));
