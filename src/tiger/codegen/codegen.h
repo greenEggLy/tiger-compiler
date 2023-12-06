@@ -32,6 +32,7 @@ public:
   void Print(FILE *out, temp::Map *map) const;
 
   [[nodiscard]] assem::InstrList *GetInstrList() const { return instr_list_; }
+  void SetInstrList(assem::InstrList *instr_list) { instr_list_ = instr_list; }
 
 private:
   assem::InstrList *instr_list_;
@@ -40,7 +41,9 @@ private:
 class CodeGen {
 public:
   CodeGen(frame::Frame *frame, std::unique_ptr<canon::Traces> traces)
-      : frame_(frame), traces_(std::move(traces)) {}
+      : frame_(frame), traces_(std::move(traces)) {
+    assem_instr_ = std::make_unique<AssemInstr>(new assem::InstrList());
+  }
 
   void Codegen();
   std::unique_ptr<AssemInstr> TransferAssemInstr() {
