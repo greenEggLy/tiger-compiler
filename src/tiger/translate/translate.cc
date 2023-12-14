@@ -106,12 +106,12 @@ public:
 };
 
 void ProgTr::Translate() {
-  auto label = temp::LabelFactory::NamedLabel("tigermain");
-  auto frame = new frame::X64Frame(label, {});
+  const auto label = temp::LabelFactory::NamedLabel("tigermain");
+  const auto frame = new frame::X64Frame(label, {});
   main_level_.reset(new Level(frame, nullptr));
   FillBaseVEnv();
   FillBaseTEnv();
-  auto res = absyn_tree_.get()->Translate(
+  const auto res = absyn_tree_.get()->Translate(
       venv_.get(), tenv_.get(), main_level_.get(), label, errormsg_.get());
   frags->PushBack(new frame::ProcFrag(res->exp_->UnNx(), main_level_->frame_));
 }

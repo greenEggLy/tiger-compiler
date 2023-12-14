@@ -252,11 +252,12 @@ void Graph<T>::Show(FILE *out, NodeList<T> *p,
     assert(n);
     if (show_info)
       show_info(n->NodeInfo());
-    fprintf(out, " (%d): ", n->Key());
+    fprintf(out, " (%d): succ: ", n->Key());
     for (auto q : n->Succ()->node_list_)
-      fprintf(out, "%d ", q->Key());
+      fprintf(out, "%d ", q->NodeInfo()->Int());
+    fprintf(out, "pred: ");
     for (auto q : n->Pred()->node_list_)
-      fprintf(out, "%d ", q->Key());
+      fprintf(out, "%d ", q->NodeInfo()->Int());
     fprintf(out, "\n");
   }
 }

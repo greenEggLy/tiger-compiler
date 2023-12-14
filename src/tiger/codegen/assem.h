@@ -19,6 +19,7 @@ public:
 class Instr {
 public:
   virtual ~Instr() = default;
+  // std::string assem_;
 
   virtual void Print(FILE *out, temp::Map *m) const = 0;
   [[nodiscard]] virtual temp::TempList *Def() const = 0;
@@ -57,9 +58,11 @@ class MoveInstr : public Instr {
 public:
   std::string assem_;
   temp::TempList *dst_, *src_;
+  bool in_mem_ = false;
 
-  MoveInstr(std::string assem, temp::TempList *dst, temp::TempList *src)
-      : assem_(std::move(assem)), dst_(dst), src_(src) {}
+  MoveInstr(std::string assem, temp::TempList *dst, temp::TempList *src,
+            const bool in_mem = false)
+      : assem_(std::move(assem)), dst_(dst), src_(src), in_mem_(in_mem) {}
 
   void Print(FILE *out, temp::Map *m) const override;
   [[nodiscard]] temp::TempList *Def() const override;
@@ -79,6 +82,7 @@ public:
   [[nodiscard]] const std::list<Instr *> &GetList() const {
     return instr_list_;
   }
+  std::list<Instr *> &GetRef() { return instr_list_; }
 
 private:
   std::list<Instr *> instr_list_;

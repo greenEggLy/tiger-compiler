@@ -1,5 +1,9 @@
 #include "tiger/frame/x64frame.h"
 
+#include "tiger/absyn/absyn.h"
+
+#include <sstream>
+
 extern frame::RegManager *reg_manager;
 
 namespace frame {
@@ -15,47 +19,68 @@ frame::Access *X64Frame::AllocLocal(const bool escape) {
   }
 }
 tree::Stm *ProcEntryExit1(frame::Frame *frame, tree::Stm *stm) {
-  auto arg_reg_list = reg_manager->ArgRegs()->GetList();
-  auto frame_formal_list = frame->formals_;
+
+  tree::Stm *callee_stm = new tree::ExpStm(new tree::ConstExp(0));
+  const auto callee_saves = new temp::TempList();
+  for (const auto &reg : reg_manager->CalleeSaves()->GetList()) {
+    const auto dst = temp::TempFactory::NewTemp();
+    const auto move_stm =
+        new tree::MoveStm(new tree::TempExp(dst), new tree::TempExp(reg));
+    callee_stm = new tree::SeqStm(callee_stm, move_stm);
+    callee_saves->Append(dst);
+  }
+
+  const auto arg_reg_list = reg_manager->ArgRegs()->GetList();
+  const auto frame_formal_list = frame->formals_;
   auto formal_it = frame_formal_list->begin();
-  auto size = arg_reg_list.size() < frame_formal_list->size()
-                  ? arg_reg_list.size()
-                  : frame_formal_list->size();
+  const auto size = arg_reg_list.size() < frame_formal_list->size()
+                        ? arg_reg_list.size()
+                        : frame_formal_list->size();
   tree::Stm *total_stm = nullptr;
   for (int i = 0; i < size; ++i) {
-    auto formal = formal_it.operator*();
-    auto formal_exp =
+    const auto formal = formal_it.operator*();
+    const auto formal_exp =
         formal->ToExp(new tree::TempExp(reg_manager->FramePointer()));
-    auto ith_reg = reg_manager->ArgRegs()->NthTemp(i);
+    const auto ith_reg = reg_manager->ArgRegs()->NthTemp(i);
     //    auto move_stm = new tree::MoveStm(new tree::TempExp(ith_reg),
     //    formal_exp);
-    auto move_stm = new tree::MoveStm(formal_exp, new tree::TempExp(ith_reg));
+    const auto move_stm =
+        new tree::MoveStm(formal_exp, new tree::TempExp(ith_reg));
     if (!total_stm)
       total_stm = move_stm;
     else
       total_stm = new tree::SeqStm(total_stm, move_stm);
-    formal_it++;
+    ++formal_it;
   }
   int i = 1;
   while (formal_it != frame_formal_list->end()) {
     // frame access
-    auto formal = formal_it.operator*();
-    auto formal_mem = new tree::MemExp(new tree::BinopExp(
+    const auto formal = formal_it.operator*();
+    const auto formal_mem = new tree::MemExp(new tree::BinopExp(
         tree::BinOp::PLUS_OP, new tree::TempExp(reg_manager->FramePointer()),
         new tree::ConstExp((++i) * reg_manager->WordSize())));
     //    auto move_stm = new tree::MoveStm(
     //        formal_mem,
     //        formal->ToExp(new tree::TempExp(reg_manager->FramePointer())));
-    auto move_stm = new tree::MoveStm(
+    const auto move_stm = new tree::MoveStm(
         formal->ToExp(new tree::TempExp(reg_manager->FramePointer())),
         formal_mem);
     if (!total_stm)
       total_stm = move_stm;
     else
       total_stm = new tree::SeqStm(total_stm, move_stm);
-    formal_it++;
+    ++formal_it;
   }
-  return new tree::SeqStm(total_stm, stm);
+  auto res_stm = new tree::SeqStm(callee_stm, new tree::SeqStm(total_stm, stm));
+
+  auto it = callee_saves->GetList().begin();
+  for (const auto &reg : reg_manager->CalleeSaves()->GetList()) {
+    res_stm =
+        new tree::SeqStm(res_stm, new tree::MoveStm(new tree::TempExp(reg),
+                                                    new tree::TempExp(*it)));
+    ++it;
+  }
+  return res_stm;
 }
 assem::InstrList *ProcEntryExit2(assem::InstrList *body) {
   body->Append(new assem::OperInstr("", new temp::TempList(),
@@ -82,8 +107,7 @@ assem::Proc *ProcEntryExit3(Frame *frame, assem::InstrList *body) {
                        "add $" +
                        word_size +
                        ", %rsp\n"
-                       "retq\n"
-                       ".END\n";
+                       "retq\n";
   return new assem::Proc(prolog, body, epilog);
 }
 
@@ -184,5 +208,21 @@ X64RegManager::X64RegManager() {
   temp_map_->Enter(r13, new std::string("%r13"));
   temp_map_->Enter(r14, new std::string("%r14"));
   temp_map_->Enter(r15, new std::string("%r15"));
+  regs_.emplace_back(rax);
+  regs_.emplace_back(rbx);
+  regs_.emplace_back(rcx);
+  regs_.emplace_back(rdx);
+  regs_.emplace_back(rsi);
+  regs_.emplace_back(rdi);
+  regs_.emplace_back(r8);
+  regs_.emplace_back(r9);
+  regs_.emplace_back(r10);
+  regs_.emplace_back(r11);
+  regs_.emplace_back(r12);
+  regs_.emplace_back(r13);
+  regs_.emplace_back(r14);
+  regs_.emplace_back(r15);
+  regs_.emplace_back(rbp);
+  regs_.emplace_back(rsp);
 }
 } // namespace frame
