@@ -46,39 +46,6 @@ std::unique_ptr<ra::Result> RegAllocator::TransferResult() {
   return std::make_unique<Result>(coloring_, assem_instr_->GetInstrList());
 }
 void RegAllocator::Build() {
-  goto test1;
-  for (const auto &flowgraph_node :
-       flow_graph_->GetFlowGraph()->Nodes()->GetList()) {
-    auto live = live_graph_->LiveOut(flowgraph_node);
-    auto instr = flowgraph_node->NodeInfo();
-    if (typeid(*instr) == typeid(assem::MoveInstr)) {
-      live->Difference(instr->Use());
-      const auto all_list = instr->Def()->Union(instr->Use());
-      if (instr->Use()->GetList().empty() || instr->Def()->GetList().empty())
-        continue;
-      const auto src_node = live_graph_->GetNode(instr->Use()->NthTemp(0));
-      const auto dst_node = live_graph_->GetNode(instr->Def()->NthTemp(0));
-      for (const auto &item : all_list->GetList()) {
-        move_list_[live_graph_->GetNode(item)].Union(src_node, dst_node);
-      }
-      worklist_moves_->Union(src_node, dst_node);
-    }
-    live = live->Union(instr->Def());
-    // if (typeid(*instr) == typeid(assem::MoveInstr) &&
-    //         dynamic_cast<assem::MoveInstr *>(instr)->in_mem_ ||
-    //     typeid(*instr) != typeid(assem::MoveInstr)) {
-    //   live = live->Union(instr->Use());
-    // }
-    for (const auto &tmp : instr->Def()->GetList()) {
-      const auto tmp_node = live_graph_->GetNode(tmp);
-      for (const auto &live_tmp : live->GetList()) {
-        AddEdge(live_graph_->GetNode(live_tmp), tmp_node);
-      }
-    }
-    // live = instr->Use()->Union(live->Difference(instr->Def()));
-  }
-  return;
-test1:
   for (const auto &node :
        live_graph_->GetLiveGraph().interf_graph->Nodes()->GetList()) {
     const auto adjs = node->Adj();
@@ -213,7 +180,6 @@ void RegAllocator::AssignColors() {
   }
 }
 void RegAllocator::ReWriteProgram() {
-  // todo
   std::set<live::INodePtr> new_temps;
   for (const auto &node : spilled_nodes_) {
     const auto v = node->NodeInfo();
