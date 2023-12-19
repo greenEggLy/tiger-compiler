@@ -155,65 +155,6 @@ void LiveGraphFactory::InterfGraph() {
       }
     }
   }
-  auto show_info = [](temp::Temp *t) {
-    auto reg = reg_manager->temp_map_->Look(t);
-    if (reg) {
-      printf("%s", reg->c_str());
-    } else {
-      printf("%d", t->Int());
-    }
-  };
-  // live_graph_.interf_graph->Show(stdout, live_graph_.interf_graph->Nodes(),
-  // show_info);
-  return;
-
-  for (const auto &node : flowgraph_->Nodes()->GetList()) {
-    auto instr = node->NodeInfo();
-    if (typeid(*instr) != typeid(assem::MoveInstr)) {
-      continue;
-    }
-    const auto src_list = instr->Use()->GetList();
-    const auto dst_list = instr->Def()->GetList();
-    if (src_list.empty() || dst_list.empty()) {
-      continue;
-    }
-    const auto src = instr->Use()->NthTemp(0);
-    const auto dst = instr->Def()->NthTemp(0);
-    const INodePtr node_src = temp_node_map_->Look(src);
-    const INodePtr node_dst = temp_node_map_->Look(dst);
-    live_graph_.moves->Append(node_src, node_dst);
-    // live_graph_.interf_graph->AddEdge(node_src, node_dst);
-    // dst_cnt[node_dst]++;
-    // dst_src[node_dst] = node_src;
-  }
-  // for (const auto &[dst, cnt] : dst_cnt) {
-  //   if (cnt == 1) {
-  //     live_graph_.moves->Delete(dst_src[dst], dst);
-  //     replacable.insert(dst);
-  //   }
-  // }
-
-  // add interference edges
-  for (const auto &node : flowgraph_->Nodes()->GetList()) {
-    auto instr = node->NodeInfo();
-    if (instr->Def()->GetList().empty())
-      continue;
-    const auto live_out = out_->Look(node);
-    temp::Temp *src = nullptr;
-    if (typeid(*instr) == typeid(assem::MoveInstr) &&
-        !instr->Use()->GetList().empty()) {
-      src = instr->Use()->NthTemp(0);
-    }
-    const INodePtr node_dst = temp_node_map_->Look(instr->Def()->NthTemp(0));
-
-    for (const auto &tmp : live_out->GetList()) {
-      if (tmp != src) {
-        const INodePtr node_out = temp_node_map_->Look(tmp);
-        live_graph_.interf_graph->AddEdge(node_dst, node_out);
-        live_graph_.interf_graph->AddEdge(node_out, node_dst);
-      }
-    }
-  }
 }
 bool LiveGraphFactory::SetIncludes(const std::set<INodePtr> &set,
                                    const INodePtr &member) {
