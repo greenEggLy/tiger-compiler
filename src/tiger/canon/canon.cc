@@ -90,7 +90,7 @@ struct ExpRefList {
 };
 
 ExpRefList *GetCallRlist(tree::Exp *exp) {
-  auto callexp = dynamic_cast<tree::CallExp *>(exp);
+  const auto callexp = dynamic_cast<tree::CallExp *>(exp);
   assert(callexp);
   tree::ExpList *args = callexp->args_;
   auto *rlist = new ExpRefList(callexp->fun_, args->GetNonConstList().begin(),

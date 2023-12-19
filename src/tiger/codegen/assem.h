@@ -79,6 +79,7 @@ public:
   [[nodiscard]] const std::list<Instr *> &GetList() const {
     return instr_list_;
   }
+  std::list<Instr *> &GetRef() { return instr_list_; }
 
 private:
   std::list<Instr *> instr_list_;
