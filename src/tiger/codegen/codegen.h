@@ -3,8 +3,10 @@
 
 #include "tiger/canon/canon.h"
 #include "tiger/codegen/assem.h"
+
+#include "tiger/absyn/absyn.h"
+
 #include "tiger/frame/x64frame.h"
-#include "tiger/translate/tree.h"
 
 // Forward Declarations
 namespace frame {

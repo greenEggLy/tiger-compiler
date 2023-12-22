@@ -44,6 +44,7 @@ private:
   void SelectSpill();
   void AssignColors();
   void ReWriteProgram();
+  void SimplifyProgram();
 
   // tool functions
   void ClearAndInit();

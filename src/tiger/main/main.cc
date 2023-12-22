@@ -4,8 +4,8 @@
 #include "tiger/output/logger.h"
 #include "tiger/output/output.h"
 #include "tiger/parse/parser.h"
-#include "tiger/translate/translate.h"
 #include "tiger/semant/semant.h"
+#include "tiger/translate/translate.h"
 
 frame::RegManager *reg_manager;
 frame::Frags *frags;
@@ -56,7 +56,9 @@ int main(int argc, char **argv) {
       // Lab 5: translate IR tree
       TigerLog("-------====Translate=====-----\n");
       tr::ProgTr prog_tr(std::move(absyn_tree), std::move(errormsg));
+      TigerLog("-------====Prog_tr====-------\n");
       prog_tr.Translate();
+      TigerLog("-------====Translate Done====-------\n");
       errormsg = prog_tr.TransferErrormsg();
     }
 
@@ -66,6 +68,8 @@ int main(int argc, char **argv) {
 
   {
     // Output assembly
+    TigerLog("-------====AssemGen====-------\n");
+
     output::AssemGen assem_gen(fname);
     assem_gen.GenAssem(true);
   }

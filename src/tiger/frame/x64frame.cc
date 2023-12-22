@@ -9,16 +9,48 @@ extern frame::RegManager *reg_manager;
 namespace frame {
 /* TODO: Put your lab5 code here */
 
-frame::Access *X64Frame::AllocLocal(const bool escape) {
+frame::Access *X64Frame::AllocLocal(const bool escape, bool in_heap,
+                                    Frame *frame) {
+#ifdef GC_ENABLED
+  // if (!escape && in_heap) {
+  // assert(frame != nullptr);
+  // todo
+  // auto access = new InFrameAccess(AllocLocal(), true);
+  // frame->heap_accesses_->emplace_back(access);
+  // return access;
+  // }
+#endif
   if (escape) {
     offset_ -= reg_manager->WordSize();
-    return new InFrameAccess(offset_);
+    const auto in_frame_acc = new InFrameAccess(offset_);
+    if (in_heap) {
+      fprintf(stdout, "escape and in heap\n");
+      frame->heap_accesses_->push_back(in_frame_acc);
+    }
+    return in_frame_acc;
   } else {
     auto reg = temp::TempFactory::NewTemp();
     return new InRegAccess(reg);
   }
 }
-tree::Stm *ProcEntryExit1(frame::Frame *frame, tree::Stm *stm) {
+int X64Frame::AllocLocal() {
+  offset_ -= reg_manager->WordSize();
+  return offset_;
+}
+std::vector<int64_t> X64Frame::GetOffsets() const {
+  std::vector<int64_t> ret;
+  for (auto &access : *heap_accesses_) {
+    printf("one in-heap access\n");
+    if (typeid(*access) == typeid(InFrameAccess)) {
+      if (const auto inf_acc = dynamic_cast<InFrameAccess *>(access);
+          inf_acc->in_heap) {
+        ret.emplace_back(inf_acc->offset);
+      }
+    }
+  }
+  return ret;
+}
+tree::Stm *ProcEntryExit1(Frame *frame, tree::Stm *stm) {
 
   tree::Stm *callee_stm = new tree::ExpStm(new tree::ConstExp(0));
   const auto callee_saves = new temp::TempList();

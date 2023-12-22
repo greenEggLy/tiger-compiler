@@ -1,20 +1,13 @@
 #include "tiger/translate/translate.h"
-
-#include <tiger/absyn/absyn.h>
-
-#include "tiger/env/env.h"
-#include "tiger/errormsg/errormsg.h"
 #include "tiger/frame/frame.h"
-#include "tiger/frame/temp.h"
-#include "tiger/frame/x64frame.h"
-
+#include "tiger/runtime/gc/roots/roots.h"
 extern frame::Frags *frags;
 extern frame::RegManager *reg_manager;
 
 namespace tr {
 
-Access *Access::AllocLocal(Level *level, bool escape) {
-  auto access = level->frame_->AllocLocal(escape);
+Access *Access::AllocLocal(Level *level, bool escape, bool in_heap) {
+  auto access = level->frame_->AllocLocal(escape, in_heap, level->frame_);
   return new Access(level, access);
 }
 
@@ -117,14 +110,26 @@ void ProgTr::Translate() {
 }
 
 Level *Level::NewLevel(tr::Level *parent, temp::Label *name,
-                       std::list<bool> formals) {
+                       std::list<bool> formals, std::list<bool> *in_heap) {
   // add the static link to the front of formals
   formals.push_front(true);
-  return new Level(new frame::X64Frame(name, formals), parent);
+#ifdef GC_ENABLED
+  assert(in_heap);
+  in_heap->emplace_front(false);
+#endif
+  return new Level(new frame::X64Frame(name, formals, in_heap), parent);
 }
 } // namespace tr
 
 namespace absyn {
+
+#ifdef GC_ENABLED
+inline bool IsPointerType(type::Ty *type) {
+  auto ty = type->ActualTy();
+  return typeid(*ty) == typeid(type::RecordTy) ||
+         typeid(*ty) == typeid(type::ArrayTy);
+}
+#endif
 
 tree::Exp *GetStaticLink(tr::Level *curr, tr::Level *target) {
   tree::Exp *static_link = new tree::TempExp(reg_manager->FramePointer());
@@ -380,11 +385,22 @@ tr::ExpAndTy *RecordExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
   auto args = new tree::ExpList();
   auto reg = temp::TempFactory::NewTemp();
   args->Insert(new tree::ConstExp(size * reg_manager->WordSize()));
+#ifdef GC_ENABLED
+  args->Append(new tree::NameExp(
+      temp::LabelFactory::NamedLabel(typ_->Name() + "_DESCRIPTOR")));
   tree::Stm *stm = new tree::MoveStm(
       new tree::TempExp(reg),
       new tree::CallExp(
           new tree::NameExp(temp::LabelFactory::NamedLabel("alloc_record")),
           args));
+#else
+  tree::Stm *stm = new tree::MoveStm(
+      new tree::TempExp(reg),
+      new tree::CallExp(
+          new tree::NameExp(temp::LabelFactory::NamedLabel("alloc_record")),
+          args));
+
+#endif
 
   // for each field
   int i = 0;
@@ -570,38 +586,40 @@ tr::ExpAndTy *ForExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
   //  return new tr::ExpAndTy(exp, type::VoidTy::Instance());
 
   venv->BeginScope();
-  auto loop_var_entry = new env::VarEntry(
-      tr::Access::AllocLocal(level, escape_), type::IntTy::Instance(), true);
-  venv->Enter(var_, loop_var_entry);
-  auto body_label = temp::LabelFactory::NewLabel();
-  auto done_label = temp::LabelFactory::NewLabel();
-  auto test_label = temp::LabelFactory::NewLabel();
-  auto lo_exp_ty = lo_->Translate(venv, tenv, level, label, errormsg);
-  auto hi_exp_ty = hi_->Translate(venv, tenv, level, label, errormsg);
-  auto body_exp_ty = body_->Translate(venv, tenv, level, done_label, errormsg);
-  auto limit_value_exp =
+  const auto loop_var =
+      new env::VarEntry(tr::Access::AllocLocal(level, escape_, false),
+                        type::IntTy::Instance(), true);
+  venv->Enter(var_, loop_var);
+  const auto body_label = temp::LabelFactory::NewLabel();
+  const auto done_label = temp::LabelFactory::NewLabel();
+  const auto test_label = temp::LabelFactory::NewLabel();
+  const auto lo_exp_ty = lo_->Translate(venv, tenv, level, label, errormsg);
+  const auto hi_exp_ty = hi_->Translate(venv, tenv, level, label, errormsg);
+  const auto body_exp_ty =
+      body_->Translate(venv, tenv, level, done_label, errormsg);
+  const auto limit_value_exp =
       new tr::ExExp(new tree::TempExp(temp::TempFactory::NewTemp()));
-  auto loop_var_exp = new tr::ExExp(new tree::TempExp(
-      dynamic_cast<frame::InRegAccess *>(loop_var_entry->access_->access_)
-          ->reg));
-  auto init_loop_var_stm =
+  const auto loop_var_exp = new tr::ExExp(new tree::TempExp(
+      dynamic_cast<frame::InRegAccess *>(loop_var->access_->access_)->reg));
+  const auto init_loop_var_stm =
       new tree::MoveStm(loop_var_exp->UnEx(), lo_exp_ty->exp_->UnEx());
-  auto init_limit_value_stm =
+  const auto init_limit_value_stm =
       new tree::MoveStm(limit_value_exp->UnEx(), hi_exp_ty->exp_->UnEx());
-  auto init_stm = new tree::SeqStm{init_loop_var_stm, init_limit_value_stm};
-  auto body_label_stm = new tree::SeqStm{new tree::LabelStm(body_label),
-                                         body_exp_ty->exp_->UnNx()};
-  auto add_loop_var_stm =
+  const auto init_stm =
+      new tree::SeqStm{init_loop_var_stm, init_limit_value_stm};
+  const auto body_label_stm = new tree::SeqStm{new tree::LabelStm(body_label),
+                                               body_exp_ty->exp_->UnNx()};
+  const auto add_loop_var_stm =
       new tree::MoveStm(loop_var_exp->UnEx(),
                         new tree::BinopExp(tree::PLUS_OP, loop_var_exp->UnEx(),
                                            new tree::ConstExp(1)));
-  auto test_stm = new tree::SeqStm{
+  const auto test_stm = new tree::SeqStm{
       new tree::CjumpStm{tree::LE_OP, loop_var_exp->UnEx(),
                          limit_value_exp->UnEx(), body_label, done_label},
       new tree::LabelStm(done_label)};
-  auto test_label_stm =
+  const auto test_label_stm =
       new tree::SeqStm{new tree::LabelStm(test_label), test_stm};
-  auto stm = new tree::SeqStm{
+  const auto stm = new tree::SeqStm{
       init_stm,
       new tree::SeqStm{
           new tree::JumpStm{new tree::NameExp{test_label},
@@ -627,10 +645,12 @@ tr::ExpAndTy *LetExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
   tenv->BeginScope();
   tree::Stm *stm = nullptr;
   for (const auto &item : this->decs_->GetList()) {
-    auto tmp_stm = item->Translate(venv, tenv, level, label, errormsg)->UnNx();
+    const auto tmp_stm =
+        item->Translate(venv, tenv, level, label, errormsg)->UnNx();
     stm = stm ? new tree::SeqStm(stm, tmp_stm) : tmp_stm;
   }
-  auto body_exp = this->body_->Translate(venv, tenv, level, label, errormsg);
+  const auto body_exp =
+      this->body_->Translate(venv, tenv, level, label, errormsg);
 
   tree::Exp *exp;
   if (stm)
@@ -645,14 +665,16 @@ tr::ExpAndTy *LetExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
 tr::ExpAndTy *ArrayExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
                                   tr::Level *level, temp::Label *label,
                                   err::ErrorMsg *errormsg) const {
-  auto type = tenv->Look(this->typ_)->ActualTy();
-  auto init_exp = this->init_->Translate(venv, tenv, level, label, errormsg);
-  auto size_exp = this->size_->Translate(venv, tenv, level, label, errormsg);
-  auto exp_list = new tree::ExpList();
+  const auto type = tenv->Look(this->typ_)->ActualTy();
+  const auto init_exp =
+      this->init_->Translate(venv, tenv, level, label, errormsg);
+  const auto size_exp =
+      this->size_->Translate(venv, tenv, level, label, errormsg);
+  const auto exp_list = new tree::ExpList();
   //  exp_list->Append(new tree::TempExp(reg_manager->FramePointer()));
   exp_list->Append(size_exp->exp_->UnEx());
   exp_list->Append(init_exp->exp_->UnEx());
-  auto exp = new tree::CallExp(
+  const auto exp = new tree::CallExp(
       new tree::NameExp(temp::LabelFactory::NamedLabel("init_array")),
       exp_list);
   return new tr::ExpAndTy(new tr::ExExp(exp), type);
@@ -669,49 +691,59 @@ tr::Exp *FunctionDec::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
                                 err::ErrorMsg *errormsg) const {
   for (const auto &function : this->functions_->GetList()) {
     // create function entries
-    auto res_type = function->result_
-                        ? tenv->Look(function->result_)->ActualTy()
-                        : type::VoidTy::Instance();
+    const auto res_type = function->result_
+                              ? tenv->Look(function->result_)->ActualTy()
+                              : type::VoidTy::Instance();
     auto *ty_list = new type::TyList();
     auto formals = std::list<bool>();
+    auto in_heap_list = std::list<bool>();
     for (const auto &param : function->params_->GetList()) {
-      auto para_type = tenv->Look(param->typ_)->ActualTy();
+      const auto para_type = tenv->Look(param->typ_)->ActualTy();
       ty_list->Append(para_type);
       formals.emplace_back(param->escape_);
+#ifdef GC_ENABLED
+      printf("is pointer: %d\n", IsPointerType(tenv->Look(param->typ_)));
+      in_heap_list.emplace_back(IsPointerType(tenv->Look(param->typ_)));
+#endif
     }
-    auto *new_level = tr::Level::NewLevel(level, function->name_, formals);
-    auto func_entry =
+    auto *new_level =
+        tr::Level::NewLevel(level, function->name_, formals, &in_heap_list);
+    const auto func_entry =
         new env::FunEntry(new_level, function->name_, ty_list, res_type);
     venv->Enter(function->name_, func_entry);
   }
 
   for (const auto &function : this->functions_->GetList()) {
-    auto func_entry =
+    const auto func_entry =
         dynamic_cast<env::FunEntry *>(venv->Look(function->name_));
-    auto ty_list = func_entry->formals_;
-    auto func_level = func_entry->level_;
+    const auto ty_list = func_entry->formals_;
+    const auto func_level = func_entry->level_;
     // create accesses
     venv->BeginScope();
     auto ty_list_iter = ty_list->GetList().begin();
     auto formal_list_iter = func_entry->level_->frame_->formals_->begin();
     auto param_list_iter = function->params_->GetList().begin();
-    formal_list_iter++;
+    ++formal_list_iter;
     while (formal_list_iter != func_entry->level_->frame_->formals_->end()) {
-      auto var_entry =
-          new env::VarEntry(new tr::Access(func_level, *formal_list_iter),
-                            ty_list_iter.operator*());
+      const auto access = new tr::Access(func_level, *formal_list_iter);
+      const auto var_entry =
+          new env::VarEntry(access, ty_list_iter.operator*());
       venv->Enter(param_list_iter.operator*()->name_, var_entry);
-      param_list_iter++;
-      ty_list_iter++;
-      formal_list_iter++;
+#ifdef GC_ENABLED
+      access->access_->SetInHeap(
+          IsPointerType(tenv->Look(param_list_iter.operator*()->typ_)));
+#endif
+      ++param_list_iter;
+      ++ty_list_iter;
+      ++formal_list_iter;
     }
-    auto body_exp = function->body_->Translate(venv, tenv, func_entry->level_,
-                                               func_entry->label_, errormsg);
-    auto ret_stm = new tree::MoveStm(
+    const auto body_exp = function->body_->Translate(
+        venv, tenv, func_entry->level_, func_entry->label_, errormsg);
+    const auto ret_stm = new tree::MoveStm(
         new tree::TempExp(reg_manager->ReturnValue()), body_exp->exp_->UnEx());
     venv->EndScope();
     //    auto body = ret_stm;
-    auto body = frame::ProcEntryExit1(func_level->frame_, ret_stm);
+    const auto body = frame::ProcEntryExit1(func_level->frame_, ret_stm);
     frags->PushBack(new frame::ProcFrag(body, func_level->frame_));
   }
   return new tr::ExExp(new tree::ConstExp(0));
@@ -720,11 +752,22 @@ tr::Exp *FunctionDec::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
 tr::Exp *VarDec::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
                            tr::Level *level, temp::Label *label,
                            err::ErrorMsg *errormsg) const {
-  auto var_exp = this->init_->Translate(venv, tenv, level, label, errormsg);
+  const auto var_exp =
+      this->init_->Translate(venv, tenv, level, label, errormsg);
+#ifdef GC_ENABLED
+  printf("Var is %s, is pointer: %d\n", this->var_->Name().c_str(),
+         IsPointerType(var_exp->ty_));
+  auto var_access =
+      tr::Access::AllocLocal(level, this->escape_, IsPointerType(var_exp->ty_));
+#else
   auto var_access = tr::Access::AllocLocal(level, this->escape_);
-  auto var_entry = new env::VarEntry(var_access, var_exp->ty_);
+#endif
+  const auto var_entry = new env::VarEntry(var_access, var_exp->ty_);
   venv->Enter(this->var_, var_entry);
-  auto ret_val_stm =
+#ifdef GC_ENABLED
+  var_access->access_->SetInHeap(IsPointerType(var_entry->ty_));
+#endif
+  const auto ret_val_stm =
       new tree::MoveStm(var_access->access_->ToExp(
                             new tree::TempExp(reg_manager->FramePointer())),
                         var_exp->exp_->UnEx());
@@ -738,10 +781,33 @@ tr::Exp *TypeDec::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
     tenv->Enter(type->name_, new type::NameTy(type->name_, nullptr));
   }
   for (const auto &type : this->types_->GetList()) {
-    auto name_type = dynamic_cast<type::NameTy *>(tenv->Look(type->name_));
+    const auto name_type =
+        dynamic_cast<type::NameTy *>(tenv->Look(type->name_));
     name_type->ty_ = type->ty_->Translate(tenv, errormsg);
     tenv->Set(type->name_, name_type);
   }
+#ifdef GC_ENABLED
+  for (const auto &type : types_->GetList()) {
+    const auto name_type =
+        dynamic_cast<type::NameTy *>(tenv->Look(type->name_));
+    if (auto actual_ty = name_type->ty_->ActualTy();
+        typeid(*actual_ty) == typeid(type::RecordTy)) {
+      const auto record_ty = dynamic_cast<type::RecordTy *>(name_type->ty_);
+
+      auto des_label = name_type->sym_->Name() + "_DESCRIPTOR";
+      std::string des_fields;
+      for (const auto &field : record_ty->fields_->GetList()) {
+        if (IsPointerType(field->ty_->ActualTy())) {
+          des_fields += "1";
+        } else {
+          des_fields += "0";
+        }
+      }
+      frags->PushBack(new frame::StringFrag(
+          temp::LabelFactory::NamedLabel(des_label), des_fields));
+    }
+  }
+#endif
   return new tr::ExExp(new tree::ConstExp(0));
 }
 

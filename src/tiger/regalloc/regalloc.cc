@@ -33,6 +33,7 @@ void RegAllocator::RegAlloc() {
       ReWriteProgram();
     } else {
       done = true;
+      SimplifyProgram();
     }
   }
 }
@@ -186,7 +187,7 @@ void RegAllocator::ReWriteProgram() {
     const auto vi = temp::TempFactory::NewTemp();
     new_temps.insert(live_graph_->GetLiveGraph().interf_graph->NewNode(vi));
     const auto access =
-        dynamic_cast<frame::InFrameAccess *>(frame_->AllocLocal(true));
+        dynamic_cast<frame::InFrameAccess *>(frame_->AllocLocal(true, false));
     const auto load_instr = new assem::OperInstr(
         "movq " + frame_->GetLabel() + "_framesize" +
             std::to_string(access->offset) + "(`s0), `d0",
@@ -202,24 +203,6 @@ void RegAllocator::ReWriteProgram() {
     while (instr_iter != instr_list.end()) {
       if (instr_iter.operator*()->Use()->Replace(v, vi)) {
         instr_list.insert(instr_iter, load_instr);
-        // const auto dst = instr_iter.operator*()->Def()->GetList().size()
-        //                      ?
-        //                      instr_iter.operator*()->Def()->GetList().front()
-        //                      : nullptr;
-        // temp::TempList *dst_list = nullptr;
-        // if (!dst) {
-        //   dst_list = nullptr;
-        // } else {
-        //   dst_list = new temp::TempList(dst);
-        // }
-        // const auto dst_list = dst ? new temp::TempList(dst) : nullptr;
-        // instr_iter.operator*() = new assem::OperInstr(
-        //     "movq " + frame_->GetLabel() + "_framesize" +
-        //         std::to_string(access->offset) + "(`s0), `d0",
-        //     dst_list, new temp::TempList(reg_manager->StackPointer()),
-        //     nullptr);
-        // instr_list.insert(instr_iter, load_instr);
-        // instr_iter.operator++();
       } else if (instr_iter.operator*()->Def()->Replace(v, vi)) {
         // def of the in-frame-access
         instr_iter.operator++();
@@ -237,11 +220,30 @@ void RegAllocator::ReWriteProgram() {
   colored_nodes_.clear();
   coalesced_nodes_.clear();
 }
+void RegAllocator::SimplifyProgram() {
+  auto &instr_list = assem_instr_->GetInstrList()->GetRef();
+  auto iter = instr_list.begin();
+  while (iter != instr_list.end()) {
+    if (auto &instr = *iter; typeid(*instr) == typeid(assem::MoveInstr)) {
+      const auto use = instr->Use()->GetList().front();
+      const auto def = instr->Def()->GetList().front();
+      if(!use || !def) {
+        ++iter;
+        continue;
+      }
+      if (color_[live_graph_->GetNode(use)] ==
+          color_[live_graph_->GetNode(def)]) {
+        iter = instr_list.erase(iter);
+        continue;
+      } else {
+        ++iter;
+        continue;
+      }
+    }
+    ++iter;
+  }
+}
 void RegAllocator::ClearAndInit() {
-  // if (flow_graph_)
-  // delete flow_graph_;
-  // if (live_graph_)
-  // delete live_graph_;
   pre_colored_.clear();
   initial_.clear();
   simplify_worklist_.clear();
@@ -276,17 +278,6 @@ void RegAllocator::ClearAndInit() {
   }
 }
 void RegAllocator::AddEdge(const live::INodePtr src, const live::INodePtr dst) {
-  // if (!src->Adj(dst) && src != dst) {
-  //   if (!SetIncludes(pre_colored_, src)) {
-  //     live_graph_->GetLiveGraph().interf_graph->AddEdge(src, dst);
-  //     degree_[src]++;
-  //   }
-  //   if (!SetIncludes(pre_colored_, dst)) {
-  //     live_graph_->GetLiveGraph().interf_graph->AddEdge(dst, src);
-  //     degree_[dst]++;
-  //   }
-  // }
-  // return;
   if (!adj_set_->Contain(src, dst) && src != dst) {
     adj_set_->Append(src, dst);
     adj_set_->Append(dst, src);

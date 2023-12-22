@@ -7,8 +7,10 @@
 
 #include "tiger/canon/canon.h"
 #include "tiger/codegen/codegen.h"
-#include "tiger/frame/frame.h"
 #include "tiger/regalloc/regalloc.h"
+#include <cstdio>
+
+#include "tiger/output/logger.h"
 
 namespace output {
 

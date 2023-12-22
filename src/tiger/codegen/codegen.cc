@@ -1,9 +1,5 @@
 #include "tiger/codegen/codegen.h"
-
-#include "tiger/absyn/absyn.h"
-
-#include <cassert>
-#include <sstream>
+#include "tiger/runtime/gc/roots/roots.h"
 
 extern frame::RegManager *reg_manager;
 
@@ -143,7 +139,7 @@ temp::Temp *BinopExp::Munch(assem::InstrList &instr_list, std::string_view fs) {
                                            new temp::TempList(left_tmp)));
     instr_list.Append(
         new assem::OperInstr("addq `s0, `d0", new temp::TempList(ret_val),
-                             new temp::TempList(right_tmp), nullptr));
+                             new temp::TempList{right_tmp, ret_val}, nullptr));
     return ret_val;
   case MINUS_OP:
     instr_list.Append(new assem::MoveInstr("movq `s0, `d0",
@@ -151,7 +147,7 @@ temp::Temp *BinopExp::Munch(assem::InstrList &instr_list, std::string_view fs) {
                                            new temp::TempList(left_tmp)));
     instr_list.Append(
         new assem::OperInstr("subq `s0, `d0", new temp::TempList(ret_val),
-                             new temp::TempList(right_tmp), nullptr));
+                             new temp::TempList{right_tmp, ret_val}, nullptr));
     return ret_val;
   case MUL_OP:
     instr_list.Append(new assem::MoveInstr(
@@ -236,7 +232,7 @@ temp::Temp *NameExp::Munch(assem::InstrList &instr_list, std::string_view fs) {
 }
 
 temp::Temp *ConstExp::Munch(assem::InstrList &instr_list, std::string_view fs) {
-  auto ret_val = temp::TempFactory::NewTemp();
+  const auto ret_val = temp::TempFactory::NewTemp();
   instr_list.Append(
       new assem::OperInstr("movq $" + std::to_string(this->consti_) + ", `d0",
                            new temp::TempList(ret_val), nullptr, nullptr));
@@ -246,14 +242,17 @@ temp::Temp *ConstExp::Munch(assem::InstrList &instr_list, std::string_view fs) {
 temp::Temp *CallExp::Munch(assem::InstrList &instr_list, std::string_view fs) {
   // auto ret_val = temp::TempFactory::NewTemp();
   this->args_->MunchArgs(instr_list, fs);
-  auto function = dynamic_cast<tree::NameExp *>(fun_);
+  const auto function = dynamic_cast<tree::NameExp *>(fun_);
   instr_list.Append(new assem::OperInstr("callq " + function->name_->Name(),
                                          reg_manager->CallerSaves(), nullptr,
                                          nullptr));
-  // instr_list.Append(
-  //     new assem::MoveInstr("movq `s0, `d0", new temp::TempList(ret_val),
-  //                          new temp::TempList(reg_manager->ReturnValue())));
-  int size = args_->GetList().size() - reg_manager->ArgRegs()->GetList().size();
+#ifdef GC_ENABLED
+  temp::Label *ret_label = temp::LabelFactory::NewLabel();
+  instr_list.Append(new assem::LabelInstr(
+      temp::LabelFactory::LabelString(ret_label), ret_label));
+#endif
+  const int size =
+      args_->GetList().size() - reg_manager->ArgRegs()->GetList().size();
   if (size > 0) {
     instr_list.Append(new assem::OperInstr(
         "addq $" + std::to_string((size)*reg_manager->WordSize()) + ", `d0",

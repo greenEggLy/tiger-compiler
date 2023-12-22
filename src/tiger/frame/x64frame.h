@@ -6,6 +6,7 @@
 #define TIGER_COMPILER_X64FRAME_H
 
 #include "tiger/frame/frame.h"
+#include "tiger/runtime/gc/roots/roots.h"
 
 namespace frame {
 
@@ -36,14 +37,25 @@ public:
   const int word_size_ = 8;
 
 public:
-  X64Frame(temp::Label *name, const std::list<bool> &formals)
-      : Frame(name, formals) {
+  X64Frame(temp::Label *name, const std::list<bool> &formals,
+           const std::list<bool> *in_heap = new std::list<bool>{})
+      : Frame(name) {
     formals_ = new std::list<Access *>();
-    for (const auto &formal : formals) {
-      formals_->emplace_back(this->AllocLocal(formal));
+#ifdef GC_ENABLED
+    auto it = in_heap->begin();
+#endif
+    for (const auto &escape : formals) {
+#ifdef GC_ENABLED
+      formals_->emplace_back(AllocLocal(escape, *(it++), this));
+#else
+      formals_->emplace_back(this->AllocLocal(escape));
+#endif
     }
   }
-  frame::Access *AllocLocal(bool escape) override;
+  frame::Access *AllocLocal(bool escape, bool in_heap = false,
+                            Frame *frame = nullptr) override;
+  int AllocLocal();
+  std::vector<int64_t> GetOffsets() const override;
 };
 
 tree::Stm *ProcEntryExit1(frame::Frame *frame, tree::Stm *stm);

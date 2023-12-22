@@ -7,8 +7,9 @@
 #include "tiger/absyn/absyn.h"
 #include "tiger/env/env.h"
 #include "tiger/errormsg/errormsg.h"
-#include "tiger/frame/frame.h"
-#include "tiger/semant/types.h"
+// #include "tiger/frame/frame.h"
+#include "tiger/frame/temp.h"
+#include "tiger/frame/x64frame.h"
 
 namespace tr {
 
@@ -50,7 +51,7 @@ public:
 
   Access(Level *level, frame::Access *access)
       : level_(level), access_(access) {}
-  static Access *AllocLocal(Level *level, bool escape);
+  static Access *AllocLocal(Level *level, bool escape, bool in_heap = false);
 };
 
 class Level {
@@ -61,7 +62,8 @@ public:
 public:
   Level(frame::Frame *frame, Level *parent) : frame_(frame), parent_(parent){};
   static Level *NewLevel(tr::Level *parent, temp::Label *name,
-                         std::list<bool> formals);
+                         std::list<bool> formals,
+                         std::list<bool> *in_heap = nullptr);
 };
 
 class ProgTr {

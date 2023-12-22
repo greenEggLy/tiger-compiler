@@ -2,13 +2,16 @@
 #define TIGER_FRAME_FRAME_H_
 
 #include <list>
-#include <memory>
 #include <string>
 
 #include "tiger/codegen/assem.h"
 #include "tiger/frame/temp.h"
+// #include "tiger/runtime/gc/roots/roots.h"
 #include "tiger/translate/tree.h"
 
+namespace gc {
+class PointerMapList;
+}
 namespace frame {
 
 class RegManager {
@@ -73,6 +76,7 @@ public:
   /* TODO: Put your lab5 code here */
   virtual tree::Exp *ToExp(tree::Exp *framePtr) const = 0;
   virtual ~Access() = default;
+  virtual void SetInHeap(bool in_heap) = 0;
 };
 
 class InRegAccess : public Access {
@@ -84,17 +88,20 @@ public:
   tree::Exp *ToExp(tree::Exp *framePtr) const override {
     return new tree::TempExp(reg);
   }
+  void SetInHeap(bool in_heap) override{};
 };
 
 class InFrameAccess : public Access {
 public:
   int offset;
-
-  explicit InFrameAccess(int offset) : offset(offset) {}
+  bool in_heap = false;
+  explicit InFrameAccess(const int offset, const bool in_heap = false)
+      : offset(offset), in_heap(in_heap) {}
   tree::Exp *ToExp(tree::Exp *frame_ptr) const override {
     return new tree::MemExp(new tree::BinopExp(tree::PLUS_OP, frame_ptr,
                                                new tree::ConstExp(offset)));
   }
+  void SetInHeap(const bool in_heap) override { this->in_heap = in_heap; }
 };
 
 class Frame {
@@ -105,10 +112,14 @@ public:
   //  time as seen from inside the callee
   std::list<Access *> *formals_ = nullptr;
   int offset_ = 0;
+  std::list<Access *> *heap_accesses_ = nullptr;
 
-public:
-  Frame(temp::Label *name, const std::list<bool> &formals) : name_(name){};
-  virtual frame::Access *AllocLocal(bool escape) = 0;
+  explicit Frame(temp::Label *name) : name_(name) {
+    heap_accesses_ = new std::list<Access *>();
+  };
+  virtual frame::Access *AllocLocal(bool escape, bool in_heap = false,
+                                    Frame *frame = nullptr) = 0;
+  virtual std::vector<int64_t> GetOffsets() const = 0;
   [[nodiscard]] std::list<Access *> *Formals() const { return formals_; }
   [[nodiscard]] std::string GetLabel() const { return name_->Name(); }
 };
@@ -124,14 +135,15 @@ public:
   enum OutputPhase {
     Proc,
     String,
+    PointerMap,
   };
 
   /**
    *Generate assembly for main program
    * @param out FILE object for output assembly file
    */
-  virtual void OutputAssem(FILE *out, OutputPhase phase,
-                           bool need_ra) const = 0;
+  virtual void OutputAssem(FILE *out, OutputPhase phase, bool need_ra,
+                           Frag **pointer_frag) const = 0;
 };
 
 class StringFrag : public Frag {
@@ -142,7 +154,8 @@ public:
   StringFrag(temp::Label *label, std::string str)
       : label_(label), str_(std::move(str)) {}
 
-  void OutputAssem(FILE *out, OutputPhase phase, bool need_ra) const override;
+  void OutputAssem(FILE *out, OutputPhase phase, bool need_ra,
+                   Frag **pointer_frag) const override;
 };
 
 class ProcFrag : public Frag {
@@ -152,7 +165,16 @@ public:
 
   ProcFrag(tree::Stm *body, Frame *frame) : body_(body), frame_(frame) {}
 
-  void OutputAssem(FILE *out, OutputPhase phase, bool need_ra) const override;
+  void OutputAssem(FILE *out, OutputPhase phase, bool need_ra,
+                   Frag **pointer_frag) const override;
+};
+
+class PointerMapFrag : public Frag {
+public:
+  gc::PointerMapList *pointer_map_list;
+  PointerMapFrag(gc::PointerMapList *list) { pointer_map_list = list; }
+  void OutputAssem(FILE *out, OutputPhase phase, bool need_ra,
+                   Frag **pointer_frag) const override;
 };
 
 class Frags {
@@ -160,6 +182,7 @@ public:
   Frags() = default;
   void PushBack(Frag *frag) { frags_.emplace_back(frag); }
   const std::list<Frag *> &GetList() { return frags_; }
+  PointerMapFrag *UpdateNextLink();
 
 private:
   std::list<Frag *> frags_;
