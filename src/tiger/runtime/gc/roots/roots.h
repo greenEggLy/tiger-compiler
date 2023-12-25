@@ -88,7 +88,7 @@ public:
       }
       if (reted && typeid(*instr) == typeid(assem::LabelInstr)) {
         PointerMap pmap;
-        pmap.ret_add = static_cast<assem::LabelInstr *>(instr)->label_->Name();
+        pmap.ret_add = dynamic_cast<assem::LabelInstr *>(instr)->label_->Name();
         pmap.label = "L" + pmap.ret_add;
         pmap.frame_size = frame_->name_->Name() + "_framesize";
         pmap.next_label = "0";

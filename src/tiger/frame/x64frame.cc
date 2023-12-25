@@ -9,22 +9,20 @@ extern frame::RegManager *reg_manager;
 namespace frame {
 /* TODO: Put your lab5 code here */
 
-frame::Access *X64Frame::AllocLocal(const bool escape, bool in_heap,
+frame::Access *X64Frame::AllocLocal(const bool escape, const bool in_heap,
                                     Frame *frame) {
 #ifdef GC_ENABLED
-  // if (!escape && in_heap) {
-  // assert(frame != nullptr);
-  // todo
-  // auto access = new InFrameAccess(AllocLocal(), true);
-  // frame->heap_accesses_->emplace_back(access);
-  // return access;
-  // }
+  if (!escape && in_heap) {
+    assert(frame != nullptr);
+    auto access = new InFrameAccess(AllocLocal(), true);
+    frame->heap_accesses_->emplace_back(access);
+    return access;
+  }
 #endif
   if (escape) {
     offset_ -= reg_manager->WordSize();
     const auto in_frame_acc = new InFrameAccess(offset_);
     if (in_heap) {
-      fprintf(stdout, "escape and in heap\n");
       frame->heap_accesses_->push_back(in_frame_acc);
     }
     return in_frame_acc;
@@ -40,7 +38,6 @@ int X64Frame::AllocLocal() {
 std::vector<int64_t> X64Frame::GetOffsets() const {
   std::vector<int64_t> ret;
   for (auto &access : *heap_accesses_) {
-    printf("one in-heap access\n");
     if (typeid(*access) == typeid(InFrameAccess)) {
       if (const auto inf_acc = dynamic_cast<InFrameAccess *>(access);
           inf_acc->in_heap) {
@@ -120,7 +117,7 @@ assem::InstrList *ProcEntryExit2(assem::InstrList *body) {
   return body;
 }
 assem::Proc *ProcEntryExit3(Frame *frame, assem::InstrList *body) {
-  auto name = frame->name_->Name();
+  const auto name = frame->name_->Name();
   auto word_size = std::to_string(reg_manager->WordSize());
   std::string prolog =
       ".set " + name + "_framesize, " + std::to_string(-frame->offset_) + "\n";
@@ -128,18 +125,9 @@ assem::Proc *ProcEntryExit3(Frame *frame, assem::InstrList *body) {
   prolog += name +
             ":\n"
             "subq $" +
-            word_size +
-            ", %rsp\n"
-            "movq %rbp, (%rsp)\n"
-            "movq %rsp, %rbp\n"
-            "subq $" +
             std::to_string(-frame->offset_) + ", %rsp\n";
-  std::string epilog = "movq %rbp, %rsp\n"
-                       "movq (%rsp), %rbp\n"
-                       "add $" +
-                       word_size +
-                       ", %rsp\n"
-                       "retq\n";
+  const std::string epilog =
+      "addq $" + std::to_string(-frame->offset_) + ",%rsp\n" + "retq\n";
   return new assem::Proc(prolog, body, epilog);
 }
 

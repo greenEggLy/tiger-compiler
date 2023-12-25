@@ -27,8 +27,6 @@ constexpr long END_MARK = 0;
 
 class TigerHeap {
 public:
-  uint64_t *stack;
-
   /**
    * Allocate a contiguous space from heap.
    * If your heap has enough space, just allocate and return.
@@ -80,6 +78,7 @@ public:
                             uint64_t descriptor_size) = 0;
   virtual char *AllocArray(uint64_t size) = 0;
   static constexpr uint64_t WORD_SIZE = 8;
+  uint64_t *stack = nullptr;
 };
 
 } // namespace gc

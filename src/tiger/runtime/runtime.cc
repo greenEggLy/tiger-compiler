@@ -44,6 +44,7 @@ EXTERNC uint64_t MaxFree() {
 }
 
 EXTERNC long *init_array(int size, long init) {
+  GET_TIGER_STACK(tiger_heap->stack);
   int i;
   uint64_t allocate_size = size * sizeof(long);
   long *a = (long *)tiger_heap->AllocArray(allocate_size);
@@ -62,11 +63,6 @@ struct string {
 };
 
 EXTERNC int *alloc_record(int size, struct string *s) {
-  fprintf(stdout, "alloc record size: %d\n", size);
-
-  // GET_RBP(tiger_heap->stack);
-  // tiger_heap->stack += 2;
-
   int i;
   int *p, *a;
   p = a = (int *)tiger_heap->AllocRecord(size, s->chars, s->length);
@@ -113,7 +109,7 @@ int main() {
   }
   // Change it to your own implementation after implement heap and delete the
   // tiger_heap = new gc::TigerHeap();
-  printf("initialize\n");
+  // fprintf(stderr, "initialize\n");
   tiger_heap = new gc::DerivedHeap();
   tiger_heap->Initialize(TIGER_HEAP_SIZE);
   return tigermain(0 /* static link */);

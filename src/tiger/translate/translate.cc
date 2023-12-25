@@ -169,10 +169,10 @@ tr::ExpAndTy *FieldVar::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
                                   err::ErrorMsg *errormsg) const {
   auto var_exp = this->var_->Translate(venv, tenv, level, label, errormsg);
   auto type = var_exp->ty_->ActualTy();
-  if (typeid(*type) != typeid(type::RecordTy)) {
-    errormsg->Error(pos_, "not a record type");
-    return new tr::ExpAndTy(nullptr, type::IntTy::Instance());
-  }
+  // if (typeid(*type) != typeid(type::RecordTy)) {
+  //   errormsg->Error(pos_, "not a record type");
+  //   return new tr::ExpAndTy(nullptr, type::IntTy::Instance());
+  // }
   auto fields =
       dynamic_cast<type::RecordTy *>(var_exp->ty_)->fields_->GetList();
   int cnt = 0;
@@ -539,52 +539,6 @@ tr::ExpAndTy *WhileExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
 tr::ExpAndTy *ForExp::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
                                 tr::Level *level, temp::Label *label,
                                 err::ErrorMsg *errormsg) const {
-  //  auto low_exp = this->lo_->Translate(venv, tenv, level, label, errormsg);
-  //  auto high_exp = this->hi_->Translate(venv, tenv, level, label, errormsg);
-  //  auto test_label = temp::LabelFactory::NewLabel();
-  //  auto body_label = temp::LabelFactory::NewLabel();
-  //  auto end_label = temp::LabelFactory::NewLabel();
-  //  venv->BeginScope();
-  //  auto var_entry = new env::VarEntry(tr::Access::AllocLocal(level, false),
-  //                                     type::IntTy::Instance(), false);
-  //  venv->Enter(var_, var_entry);
-  //  auto loop_var = new tr::ExExp(new tree::TempExp(
-  //      dynamic_cast<frame::InRegAccess
-  //      *>(var_entry->access_->access_)->reg));
-  //  auto high_val =
-  //      new tr::ExExp(new tree::TempExp(temp::TempFactory::NewTemp()));
-  //  auto body_exp = body_->Translate(venv, tenv, level, label, errormsg);
-  //  // init
-  //  auto loop_var_init_stm =
-  //      new tree::MoveStm(loop_var->UnEx(), low_exp->exp_->UnEx());
-  //  auto high_val_init_stm =
-  //      new tree::MoveStm(high_val->UnEx(), high_exp->exp_->UnEx());
-  //
-  //  // every step
-  //  auto loop_var_add_stm = new tree::MoveStm(
-  //      loop_var->UnEx(),
-  //      new tree::BinopExp(tree::BinOp::PLUS_OP, loop_var->UnEx(),
-  //                         new tree::ConstExp(1)));
-  //  auto high_val_test_stm =
-  //      new tree::CjumpStm(tree::RelOp::LE_OP, loop_var->UnEx(),
-  //      high_val->UnEx(),
-  //                         body_label, end_label);
-  //
-  //  auto exp = new tr::NxExp(new tree::SeqStm(
-  //      new tree::SeqStm(loop_var_init_stm, high_val_init_stm),
-  //      new tree::SeqStm(
-  //          new tree::JumpStm(new tree::NameExp(test_label),
-  //                            new std::vector{test_label}),
-  //          new tree::SeqStm(
-  //              new tree::SeqStm(new tree::LabelStm(body_label),
-  //                               body_exp->exp_->UnNx()),
-  //              new tree::SeqStm(loop_var_add_stm,
-  //                               new tree::SeqStm(new
-  //                               tree::LabelStm(test_label),
-  //                                                high_val_test_stm))))));
-  //  venv->EndScope();
-  //  return new tr::ExpAndTy(exp, type::VoidTy::Instance());
-
   venv->BeginScope();
   const auto loop_var =
       new env::VarEntry(tr::Access::AllocLocal(level, escape_, false),
@@ -702,7 +656,6 @@ tr::Exp *FunctionDec::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
       ty_list->Append(para_type);
       formals.emplace_back(param->escape_);
 #ifdef GC_ENABLED
-      printf("is pointer: %d\n", IsPointerType(tenv->Look(param->typ_)));
       in_heap_list.emplace_back(IsPointerType(tenv->Look(param->typ_)));
 #endif
     }
@@ -755,17 +708,21 @@ tr::Exp *VarDec::Translate(env::VEnvPtr venv, env::TEnvPtr tenv,
   const auto var_exp =
       this->init_->Translate(venv, tenv, level, label, errormsg);
 #ifdef GC_ENABLED
-  printf("Var is %s, is pointer: %d\n", this->var_->Name().c_str(),
-         IsPointerType(var_exp->ty_));
-  auto var_access =
-      tr::Access::AllocLocal(level, this->escape_, IsPointerType(var_exp->ty_));
+  const auto ty = typ_ ? tenv->Look(typ_) : nullptr;
+  const auto ty_ptr = ty ? IsPointerType(ty) : false;
+  auto var_access = tr::Access::AllocLocal(
+      level, this->escape_, IsPointerType(var_exp->ty_) || ty_ptr);
 #else
   auto var_access = tr::Access::AllocLocal(level, this->escape_);
 #endif
-  const auto var_entry = new env::VarEntry(var_access, var_exp->ty_);
+  auto tty = var_exp->ty_;
+  if (typeid(*var_exp->ty_) == typeid(type::NilTy)) {
+    tty = tenv->Look(this->typ_);
+  }
+  const auto var_entry = new env::VarEntry(var_access, tty);
   venv->Enter(this->var_, var_entry);
 #ifdef GC_ENABLED
-  var_access->access_->SetInHeap(IsPointerType(var_entry->ty_));
+  var_access->access_->SetInHeap(IsPointerType(tty));
 #endif
   const auto ret_val_stm =
       new tree::MoveStm(var_access->access_->ToExp(

@@ -12,7 +12,7 @@ class PointerMapNode {
 public:
   uint64_t label = 0;
   uint64_t next_label = 0;
-  uint64_t ret_add = 0;
+  uint64_t key = 0;
   uint64_t frame_size = 0;
   uint64_t in_main = 0;
   std::vector<int64_t> offsets;
@@ -29,7 +29,7 @@ public:
       PointerMapNode node;
       node.label = reinterpret_cast<uint64_t>(cur);
       node.next_label = *(cur++);
-      node.ret_add = *(cur++);
+      node.key = *(cur++);
       node.frame_size = *(cur++);
       node.in_main = *(cur++);
       while (true) {
@@ -48,12 +48,12 @@ public:
     std::vector<uint64_t> address;
     bool in_main = false;
     while (!in_main) {
-      uint64_t ret_add = *(sp - 1);
-      for (auto &&pm : pointer_map_) {
-        if (pm.ret_add == ret_add) {
+      const uint64_t ret_add = *(sp);
+      for (const auto &pm : pointer_map_) {
+        if (pm.key == ret_add) {
           for (const int64_t offset : pm.offsets) {
             const auto pointer_add = reinterpret_cast<uint64_t *>(
-                offset + reinterpret_cast<int64_t>(sp) +
+                offset + reinterpret_cast<int64_t>(sp + 1) +
                 static_cast<int64_t>(pm.frame_size));
             address.emplace_back(*pointer_add);
           }
@@ -70,17 +70,19 @@ public:
 class HeapManger {
 public:
   HeapManger() = default;
-  void SetFree(uint64_t loc, uint64_t size) { free_map_[loc] = size; }
-  char *Alloc(uint64_t size) {
+  void SetFree(uint64_t loc, uint64_t size) {
+    if (used_map_.find(loc) != used_map_.end())
+      used_map_.erase(loc);
+    free_map_[loc] = size;
+  }
+  char *Alloc(const uint64_t size) {
     auto iter = free_map_.begin();
     for (; iter != free_map_.end(); ++iter) {
-      // auto [loc, free_size] = *iter;
       const auto loc = iter->first;
       const auto free_size = iter->second;
-      // fprintf(stderr, "free size: %zd, size: %zd\n", free_size, size);
       if (free_size > size) {
         // can have a new free space
-        free_map_[free_size + size] = free_size - size;
+        free_map_[loc + size] = free_size - size;
         used_map_[loc] = size;
         break;
       }
@@ -133,12 +135,17 @@ public:
              uint64_t des_size)
       : start(start), size(size), descriptor_name(des_name),
         descriptor_size(des_size) {}
-  bool InRecord(const uint64_t address) const {
-    if (size <= 0)
+  bool IsRecordStart(const uint64_t address) {
+    if (size == 0)
       return false;
-    const auto words =
-        (static_cast<int64_t>(address) - reinterpret_cast<int64_t>(start));
-    return words >= 0 && words <= size;
+    return address == reinterpret_cast<uint64_t>(start);
+  }
+  bool InRecord(const uint64_t address) const {
+    if (size == 0)
+      return false;
+    const int64_t delta =
+        static_cast<int64_t>(address) - reinterpret_cast<int64_t>(start);
+    return (delta >= 0 && delta <= (size - 8));
   }
   bool Marked() const { return marked; }
   void Mark() { marked = true; }
@@ -157,11 +164,11 @@ public:
   }
   ArrayInfo(char *start, uint64_t size) : start(start), size(size) {}
   bool InArray(const uint64_t address) const {
-    if (size <= 0)
+    if (size == 0)
       return false;
-    const auto words =
-        (static_cast<int64_t>(address) - reinterpret_cast<int64_t>(start));
-    return words >= 0 && words <= size;
+    const int64_t delta =
+        static_cast<int64_t>(address) - reinterpret_cast<int64_t>(start);
+    return (delta >= 0 && delta <= (size - 8));
   }
   bool Marked() const { return marked; }
   void Mark() { marked = true; }
@@ -186,7 +193,7 @@ public:
 
   void GC() override;
 
-  void Mark();
+  void Mark(uint64_t *sp);
 
   void Sweep();
 
